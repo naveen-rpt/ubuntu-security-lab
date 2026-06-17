@@ -1,0 +1,323 @@
+# Standard Operating Procedure (SOP)
+## Ubuntu Security Lab - Docker Setup & Access
+
+**Last Updated:** 2026-06-17  
+**Status:** ✅ Working Configuration
+
+---
+
+## 1. PREREQUISITES
+
+- Docker and Docker Compose installed
+- 4GB+ RAM available on host
+- Ports 8000, 8001, and 3222 available
+
+---
+
+## 2. INITIAL SETUP
+
+### Step 1: Navigate to Project Directory
+```bash
+cd /workspaces/ubuntu-security-lab/hackerone
+```
+
+### Step 2: Clean Up (If Restarting)
+```bash
+docker rm -f ubuntu-control-container
+```
+
+### Step 3: Start the Container
+```bash
+docker-compose up -d
+```
+
+**Expected Output:**
+```
+✔ Container ubuntu-control-container  Started  0.4s
+```
+
+### Step 4: Wait for Services to Initialize
+```bash
+sleep 3
+```
+
+---
+
+## 3. VERIFY SERVICES
+
+### Check Container Status
+```bash
+docker ps | grep ubuntu-control
+```
+
+**Expected Output:**
+- Container Status: `Up` (showing uptime)
+- Ports: `0.0.0.0:3222->22/tcp, 0.0.0.0:8000->8000/tcp, 0.0.0.0:8001->8000/tcp`
+
+### Test Web Dashboard
+```bash
+curl -s http://localhost:8000/ | head -5
+```
+
+**Expected Output:**
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+```
+
+---
+
+## 4. ACCESS METHODS
+
+### Method A: Local Access (Localhost)
+**Port 8000 (Native):**
+```
+http://localhost:8000
+```
+
+**Port 8001 (Alternative):**
+```
+http://localhost:8001
+```
+
+### Method B: GitHub Codespace Port Forward
+```
+https://cautious-space-giggle-xrv4wjg969cv7wj-8000.app.github.dev
+```
+
+### Method C: SSH Access
+```bash
+ssh root@localhost -p 3222
+```
+**Credentials:**
+- Username: `root`
+- Password: `admin-secure-password-2026`
+
+---
+
+## 5. API ENDPOINTS
+
+### Root Endpoint (No Auth Required)
+```bash
+GET http://localhost:8000/
+```
+Returns: HTML dashboard
+
+### Authenticated Endpoints (Requires API Key Header)
+Default API Key: `default-key-super-secret-12345`
+
+#### Get System Stats
+```bash
+curl -H "X-API-Key: default-key-super-secret-12345" \
+  http://localhost:8000/api/stats
+```
+
+#### Upload File
+```bash
+curl -X POST \
+  -H "X-API-Key: default-key-super-secret-12345" \
+  -F "file=@/path/to/file.txt" \
+  http://localhost:8000/api/send
+```
+
+#### List Files
+```bash
+curl -H "X-API-Key: default-key-super-secret-12345" \
+  http://localhost:8000/api/receive
+```
+
+#### Download File
+```bash
+curl -H "X-API-Key: default-key-super-secret-12345" \
+  -O \
+  http://localhost:8000/api/receive/filename
+```
+
+#### Execute Command
+```bash
+curl -X POST \
+  -H "X-API-Key: default-key-super-secret-12345" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"whoami"}' \
+  http://localhost:8000/api/execute
+```
+
+---
+
+## 6. FIREWALL CONFIGURATION
+
+**Location:** `/workspaces/ubuntu-security-lab/hackerone/app/blocked.json`
+
+**Current Configuration:**
+```json
+{
+  "whitelisted_ips": [
+    "127.0.0.1",
+    "localhost",
+    "172.18.0.1",
+    "0.0.0.0"
+  ],
+  "whitelisted_ports": [
+    8000,
+    2222
+  ],
+  "blocked_ips": [
+    "103.22.11.4"
+  ],
+  "blocked_domains": []
+}
+```
+
+### Key Points:
+- ✅ `127.0.0.1` - Localhost traffic
+- ✅ `172.18.0.1` - Docker bridge
+- ✅ `0.0.0.0` - All IPs (GitHub Codespace port-forward compatibility)
+- ❌ `103.22.11.4` - Blocked attacker IP
+
+---
+
+## 7. CONTAINER INFORMATION
+
+**Container Name:** `ubuntu-control-container`  
+**Base Image:** Ubuntu 22.04  
+**Resource Limits:**
+- CPU: 2 cores max
+- Memory: 1.5 GB max
+- Reserved: 256 MB
+
+**Port Mappings:**
+| Host Port | Container Port | Service |
+|-----------|---------------|---------|
+| 8000 | 8000 | FastAPI Web Dashboard |
+| 8001 | 8000 | FastAPI Web Dashboard (Backup) |
+| 3222 | 22 | SSH |
+
+**Volumes:**
+- `./data:/data` - Shared data directory
+- `./app/keys.json:/app/app/keys.json` - API keys database
+
+---
+
+## 8. TROUBLESHOOTING
+
+### Issue: Container Won't Start
+**Solution:**
+```bash
+docker logs ubuntu-control-container
+docker rm -f ubuntu-control-container
+docker-compose up -d
+```
+
+### Issue: Port Already in Use
+**Solution:**
+```bash
+# Find process using port 8000
+lsof -i :8000
+
+# Kill the process
+kill -9 <PID>
+
+# Restart container
+docker-compose restart
+```
+
+### Issue: 404 Error on Access
+**Solution:**
+1. Verify container is running: `docker ps | grep ubuntu-control`
+2. Check firewall config: `docker exec ubuntu-control-container cat /app/app/blocked.json`
+3. Verify IP is whitelisted (should be 0.0.0.0 for all access)
+4. Clear browser cache and try again
+
+### Issue: SSH Connection Refused
+**Solution:**
+```bash
+# Verify SSH service is running
+docker exec ubuntu-control-container ps aux | grep sshd
+
+# Check SSH logs
+docker logs ubuntu-control-container | grep -i ssh
+
+# Ensure port 3222 is correct
+docker ps | grep 3222
+```
+
+### Issue: API Requests Return Forbidden
+**Solution:**
+1. Check API key header is included: `-H "X-API-Key: default-key-super-secret-12345"`
+2. Verify IP is not in blocked list
+3. Check intrusion history: `docker exec ubuntu-control-container cat /app/app/intrusion_history.json | tail -5`
+
+---
+
+## 9. DOCKER COMPOSE CONFIGURATION
+
+**File:** `docker-compose.yml`
+
+```yaml
+version: '3.8'
+
+services:
+  ubuntu-control:
+    build: .
+    container_name: ubuntu-control-container
+    restart: unless-stopped
+    ports:
+      - "3222:22"    # SSH
+      - "8000:8000"  # FastAPI (Primary)
+      - "8001:8000"  # FastAPI (Backup)
+    environment:
+      - ROOT_PASSWORD=admin-secure-password-2026
+    volumes:
+      - ./data:/data
+      - ./app/keys.json:/app/app/keys.json
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1500M
+        reservations:
+          memory: 256M
+```
+
+---
+
+## 10. QUICK COMMANDS REFERENCE
+
+| Task | Command |
+|------|---------|
+| Start Container | `docker-compose up -d` |
+| Stop Container | `docker-compose down` |
+| View Logs | `docker logs ubuntu-control-container` |
+| SSH Access | `ssh root@localhost -p 3222` |
+| Test Web | `curl http://localhost:8000` |
+| Check Firewall | `docker exec ubuntu-control-container cat /app/app/blocked.json` |
+| View Intrusions | `docker exec ubuntu-control-container cat /app/app/intrusion_history.json` |
+| Container Stats | `docker stats ubuntu-control-container` |
+
+---
+
+## 11. SECURITY NOTES
+
+⚠️ **Important for Production:**
+- Change `ROOT_PASSWORD` in docker-compose.yml
+- Change API key in `app/keys.json`
+- Restrict `whitelisted_ips` to specific trusted IPs only
+- Monitor `intrusion_history.json` for security events
+- Use SSH public key authentication instead of password
+
+---
+
+## 12. VERIFICATION CHECKLIST
+
+- [ ] Docker and Docker Compose installed
+- [ ] Container started successfully
+- [ ] Port 8000 responding with 200 OK
+- [ ] Port 8001 responding with 200 OK
+- [ ] SSH accessible on port 3222
+- [ ] API key authentication working
+- [ ] Firewall whitelist updated for your IP
+- [ ] No errors in container logs
